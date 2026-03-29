@@ -2315,7 +2315,7 @@ def render_relationship_family_tree(graph_payload: dict) -> str:
         "&": "&amp;",
         "<": "&lt;",
         ">": "&gt;",
-        "\"": "&quot;",
+        '"': "&quot;",
         "'": "&#39;",
       }[char]));
     }
