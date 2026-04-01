@@ -3150,3 +3150,1117 @@ def render_relationship_family_tree(graph_payload: dict) -> str:
 </html>
 """
     return html.replace("__CASEMAP_DATA__", data)
+
+
+def render_hybrid_hierarchy(graph_payload: dict) -> str:
+    data = json.dumps(graph_payload, ensure_ascii=False)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{graph_payload["meta"].get("title", "Casemap Hybrid Hierarchical Graph")}</title>
+  <style>
+    :root {{
+      --bg: #f3ede2;
+      --bg-deep: #ebe2d2;
+      --panel: rgba(255, 250, 242, 0.88);
+      --panel-strong: rgba(255, 255, 255, 0.92);
+      --ink: #1f2328;
+      --muted: #6e675d;
+      --line: rgba(31, 35, 40, 0.12);
+      --shadow: 0 20px 60px rgba(31, 35, 40, 0.08);
+      --shadow-soft: 0 12px 28px rgba(31, 35, 40, 0.06);
+      --module: #204e5f;
+      --subground: #d08c34;
+      --topic: #5b7f63;
+      --lineage: #7c2d12;
+      --case: #355c7d;
+      --statute: #6b7280;
+      --accent: #8f3b1b;
+    }}
+
+    * {{ box-sizing: border-box; }}
+
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+      background:
+        radial-gradient(circle at top left, rgba(208, 140, 52, 0.18), transparent 26%),
+        radial-gradient(circle at top right, rgba(32, 78, 95, 0.14), transparent 24%),
+        linear-gradient(180deg, #faf5ec 0%, var(--bg) 42%, var(--bg-deep) 100%);
+    }}
+
+    .shell {{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      min-height: 100vh;
+    }}
+
+    .workspace {{
+      padding: 28px;
+      overflow-y: auto;
+    }}
+
+    .detail-panel {{
+      border-left: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 252, 247, 0.95), rgba(244, 238, 228, 0.98));
+      padding: 24px 22px 30px;
+      overflow-y: auto;
+    }}
+
+    .meta {{
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin-bottom: 10px;
+    }}
+
+    h1, h2, h3 {{
+      margin: 0;
+      font-weight: 600;
+    }}
+
+    h1 {{
+      font-size: clamp(34px, 4vw, 54px);
+      line-height: 0.92;
+      letter-spacing: -0.05em;
+      margin-bottom: 12px;
+    }}
+
+    .intro {{
+      max-width: 960px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.62;
+      margin: 0 0 18px;
+    }}
+
+    .toolbar {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }}
+
+    .nav {{
+      display: inline-flex;
+      gap: 8px;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.58);
+      box-shadow: var(--shadow-soft);
+    }}
+
+    .nav a {{
+      padding: 10px 14px;
+      border-radius: 999px;
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 13px;
+      letter-spacing: 0.01em;
+      border-bottom: 0;
+    }}
+
+    .nav a.active {{
+      background: var(--ink);
+      color: white;
+    }}
+
+    .search-box {{
+      width: min(360px, 100%);
+      display: grid;
+      gap: 8px;
+    }}
+
+    .search-box input {{
+      width: 100%;
+      border: 1px solid rgba(31, 35, 40, 0.12);
+      border-radius: 18px;
+      padding: 13px 15px;
+      background: rgba(255, 255, 255, 0.84);
+      font: inherit;
+      color: var(--ink);
+    }}
+
+    .metric-strip,
+    .breadcrumbs,
+    .results,
+    .node-grid,
+    .lineage-grid,
+    .detail-chip-row {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }}
+
+    .metric-strip {{
+      margin-bottom: 18px;
+    }}
+
+    .metric-card,
+    .crumb,
+    .result-pill,
+    .detail-chip {{
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.68);
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: var(--ink);
+      box-shadow: var(--shadow-soft);
+    }}
+
+    .metric-card strong {{
+      display: block;
+      font-size: 18px;
+      letter-spacing: -0.03em;
+    }}
+
+    .metric-card span {{
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }}
+
+    .crumb,
+    .result-pill {{
+      cursor: pointer;
+      font: inherit;
+    }}
+
+    .stack-view {{
+      display: grid;
+      gap: 18px;
+      padding-bottom: 24px;
+    }}
+
+    .tree-section {{
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 18px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(247, 243, 236, 0.74));
+      box-shadow: var(--shadow);
+    }}
+
+    .section-head {{
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }}
+
+    .section-title {{
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }}
+
+    .section-caption {{
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }}
+
+    .root-wrap {{
+      display: flex;
+      justify-content: center;
+    }}
+
+    .tree-node {{
+      min-width: 220px;
+      max-width: 320px;
+      border: 1px solid rgba(31, 35, 40, 0.1);
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 243, 236, 0.9));
+      box-shadow: var(--shadow-soft);
+      padding: 15px;
+      text-align: left;
+      cursor: pointer;
+      transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+      font: inherit;
+      color: var(--ink);
+    }}
+
+    .tree-node.active {{
+      border-color: rgba(31, 35, 40, 0.3);
+      box-shadow: 0 24px 58px rgba(31, 35, 40, 0.14);
+      transform: translateY(-1px);
+    }}
+
+    .tree-node.root {{
+      min-width: 360px;
+      background: linear-gradient(180deg, #1d242c, #11161c);
+      color: white;
+      border-color: rgba(17, 22, 28, 0.75);
+    }}
+
+    .tree-node.module {{
+      background: linear-gradient(180deg, rgba(32, 78, 95, 0.95), rgba(38, 92, 112, 0.88));
+      color: white;
+    }}
+
+    .tree-node.subground {{
+      background: linear-gradient(180deg, rgba(208, 140, 52, 0.18), rgba(255, 248, 235, 0.95));
+    }}
+
+    .tree-node.topic {{
+      background: linear-gradient(180deg, rgba(91, 127, 99, 0.16), rgba(249, 252, 249, 0.95));
+    }}
+
+    .tree-node.lineage {{
+      background: linear-gradient(180deg, rgba(124, 45, 18, 0.14), rgba(255, 248, 244, 0.96));
+    }}
+
+    .tree-node.case {{
+      background: linear-gradient(180deg, rgba(53, 92, 125, 0.15), rgba(247, 250, 252, 0.95));
+    }}
+
+    .tree-node.statute {{
+      background: linear-gradient(180deg, rgba(107, 114, 128, 0.14), rgba(249, 249, 251, 0.96));
+    }}
+
+    .node-kicker {{
+      display: inline-flex;
+      margin-bottom: 10px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(31, 35, 40, 0.08);
+    }}
+
+    .tree-node.root .node-kicker,
+    .tree-node.module .node-kicker {{
+      color: rgba(255, 255, 255, 0.78);
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.16);
+    }}
+
+    .node-name {{
+      display: block;
+      font-size: 17px;
+      line-height: 1.24;
+      letter-spacing: -0.02em;
+    }}
+
+    .node-subtitle {{
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--muted);
+    }}
+
+    .tree-node.root .node-name {{
+      font-size: 22px;
+    }}
+
+    .tree-node.root .node-subtitle,
+    .tree-node.module .node-subtitle {{
+      color: rgba(255, 255, 255, 0.78);
+    }}
+
+    .chip-row {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }}
+
+    .micro-chip {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid rgba(31, 35, 40, 0.1);
+      border-radius: 999px;
+      padding: 6px 9px;
+      font-size: 11px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.76);
+    }}
+
+    .tree-node.root .micro-chip,
+    .tree-node.module .micro-chip {{
+      color: rgba(255, 255, 255, 0.78);
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.14);
+    }}
+
+    .lineage-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }}
+
+    .lineage-panel,
+    .aux-panel {{
+      border: 1px solid rgba(31, 35, 40, 0.08);
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(247, 243, 236, 0.82));
+      padding: 16px;
+      box-shadow: var(--shadow-soft);
+    }}
+
+    .branch-head {{
+      margin-bottom: 14px;
+    }}
+
+    .branch-head h3 {{
+      font-size: 16px;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+    }}
+
+    .branch-meta {{
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }}
+
+    .lineage-track {{
+      position: relative;
+      display: grid;
+      gap: 14px;
+      justify-items: center;
+      padding: 4px 0;
+    }}
+
+    .lineage-track::before {{
+      content: "";
+      position: absolute;
+      top: 10px;
+      bottom: 10px;
+      left: calc(50% - 1px);
+      width: 2px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(124, 45, 18, 0.1), rgba(124, 45, 18, 0.42), rgba(124, 45, 18, 0.1));
+    }}
+
+    .lineage-step {{
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      position: relative;
+      z-index: 1;
+    }}
+
+    .lineage-step .tree-node {{
+      width: min(100%, 260px);
+    }}
+
+    .aux-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }}
+
+    .detail-type {{
+      display: inline-flex;
+      margin-bottom: 14px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }}
+
+    .detail-summary {{
+      font-size: 15px;
+      line-height: 1.64;
+      margin: 0 0 16px;
+    }}
+
+    .data-list {{
+      list-style: none;
+      padding: 0;
+      margin: 0 0 18px;
+      display: grid;
+      gap: 10px;
+    }}
+
+    .data-list li {{
+      border: 1px solid rgba(31, 35, 40, 0.08);
+      border-radius: 18px;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.64);
+      line-height: 1.5;
+      font-size: 14px;
+      box-shadow: var(--shadow-soft);
+    }}
+
+    .data-list li.clickable {{
+      cursor: pointer;
+    }}
+
+    .empty {{
+      color: var(--muted);
+      font-style: italic;
+    }}
+
+    a {{
+      color: var(--ink);
+    }}
+
+    @media (hover: hover) and (pointer: fine) {{
+      .tree-node:hover {{
+        border-color: rgba(31, 35, 40, 0.28);
+        box-shadow: 0 18px 38px rgba(31, 35, 40, 0.1);
+      }}
+    }}
+
+    @media (max-width: 1120px) {{
+      .shell {{
+        grid-template-columns: 1fr;
+      }}
+
+      .detail-panel {{
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="workspace">
+      <div class="meta">Casemap Hybrid Hierarchy</div>
+      <h1>Hong Kong Contract Law Hierarchical Knowledge Graph</h1>
+      <p class="intro">The graph is back as a visual hierarchy. Start at the lifecycle modules, drill into subgrounds and topics, then inspect the linked cases, statutes, and curated authority lineages for each branch.</p>
+      <div class="toolbar">
+        <nav class="nav">
+          <a href="/" class="active">Hierarchy</a>
+          <a href="/relationships">Relationship Graph</a>
+          <a href="/mvp">MVP GraphRAG</a>
+          <a href="/internal">Internal Explorer</a>
+        </nav>
+        <label class="search-box">
+          <span class="meta">Jump To Node</span>
+          <input id="searchInput" type="search" placeholder="Module, topic, case, statute, lineage">
+        </label>
+      </div>
+      <div id="metricStrip" class="metric-strip"></div>
+      <div id="breadcrumbs" class="breadcrumbs"></div>
+      <div id="results" class="results"></div>
+      <div id="treeStack" class="stack-view"></div>
+    </section>
+    <aside class="detail-panel">
+      <div class="meta">Selection</div>
+      <h2 id="detailTitle">Overview</h2>
+      <div id="detailType" class="detail-type">Root</div>
+      <p id="detailSummary" class="detail-summary">Choose a module, subground, topic, case, statute, or lineage to inspect how the hierarchy connects to the authority network.</p>
+      <div id="detailChips" class="detail-chip-row"></div>
+      <div class="meta">Key Facts</div>
+      <ul id="detailFacts" class="data-list"><li class="empty">Select a node to inspect its metrics and graph context.</li></ul>
+      <div class="meta">Related Authorities</div>
+      <ul id="detailNeighbors" class="data-list"><li class="empty">No related authorities selected.</li></ul>
+      <div class="meta">Principles / Lineage</div>
+      <ul id="detailSupport" class="data-list"><li class="empty">No principle or lineage data selected.</li></ul>
+    </aside>
+  </div>
+  <script>
+    const payload = {data};
+    const nodes = payload.nodes || [];
+    const edges = payload.edges || [];
+    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+    const outgoing = new Map();
+    const incoming = new Map();
+
+    edges.forEach((edge) => {{
+      if (!outgoing.has(edge.source)) outgoing.set(edge.source, []);
+      if (!incoming.has(edge.target)) incoming.set(edge.target, []);
+      outgoing.get(edge.source).push(edge);
+      incoming.get(edge.target).push(edge);
+    }});
+
+    const tree = payload.tree || {{}};
+    const modules = (tree.modules || []).map((module) => {{
+      const moduleNode = nodeMap.get(module.id) || {{}};
+      return {{
+        ...module,
+        ...moduleNode,
+        type: "Module",
+        subgrounds: (module.subgrounds || []).map((subground) => {{
+          const subgroundNode = nodeMap.get(subground.id) || {{}};
+          return {{
+            ...subground,
+            ...subgroundNode,
+            type: "Subground",
+            module_id: module.id,
+          }};
+        }}),
+      }};
+    }});
+
+    const moduleMap = new Map(modules.map((module) => [module.id, module]));
+    const subgrounds = modules.flatMap((module) => module.subgrounds);
+    const subgroundMap = new Map(subgrounds.map((subground) => [subground.id, subground]));
+    const topics = nodes.filter((node) => node.type === "Topic");
+    const cases = nodes.filter((node) => node.type === "Case");
+    const statutes = nodes.filter((node) => node.type === "Statute");
+    const lineages = nodes.filter((node) => node.type === "AuthorityLineage");
+    const caseCards = payload.case_cards || {{}};
+
+    const rootNode = {{
+      id: "__root__",
+      type: "Root",
+      label: tree.label_en || payload.meta.title || "Casemap Hybrid Hierarchy",
+      summary: "Visual hierarchy for the hybrid graph. Modules anchor the doctrinal structure; topics connect that structure to cases, statutes, and authority lineages.",
+      secondary: tree.label_zh || "香港合同法分層知識圖譜",
+    }};
+
+    const treeStack = document.getElementById("treeStack");
+    const metricStrip = document.getElementById("metricStrip");
+    const breadcrumbsEl = document.getElementById("breadcrumbs");
+    const resultsEl = document.getElementById("results");
+    const searchInput = document.getElementById("searchInput");
+    const detailTitle = document.getElementById("detailTitle");
+    const detailType = document.getElementById("detailType");
+    const detailSummary = document.getElementById("detailSummary");
+    const detailFacts = document.getElementById("detailFacts");
+    const detailNeighbors = document.getElementById("detailNeighbors");
+    const detailSupport = document.getElementById("detailSupport");
+    const detailChips = document.getElementById("detailChips");
+
+    const state = {{
+      moduleId: modules[0]?.id || null,
+      subgroundId: modules[0]?.subgrounds?.[0]?.id || null,
+      selectedId: "__root__",
+    }};
+
+    function escapeHtml(value) {{
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }}
+
+    function labelForType(type) {{
+      return {{
+        Root: "Root",
+        Module: "Module",
+        Subground: "Subground",
+        Topic: "Topic",
+        Case: "Case",
+        Statute: "Statute",
+        AuthorityLineage: "Lineage",
+        Paragraph: "Paragraph",
+        Proposition: "Proposition",
+      }}[type] || type;
+    }}
+
+    function getNode(id) {{
+      if (!id) return null;
+      if (id === rootNode.id) return rootNode;
+      return moduleMap.get(id) || subgroundMap.get(id) || nodeMap.get(id) || null;
+    }}
+
+    function makeSection(title, caption) {{
+      const section = document.createElement("section");
+      section.className = "tree-section";
+      section.innerHTML = `<div class="section-head"><div class="section-title">${{escapeHtml(title)}}</div><div class="section-caption">${{escapeHtml(caption)}}</div></div>`;
+      return section;
+    }}
+
+    function microChip(label) {{
+      return `<span class="micro-chip">${{escapeHtml(label)}}</span>`;
+    }}
+
+    function createNodeCard(node, options = {{}}) {{
+      const button = document.createElement("button");
+      button.type = "button";
+      const typeClass = (node.type || "").toLowerCase();
+      button.className = `tree-node ${{typeClass}}${{state.selectedId === node.id ? " active" : ""}}`;
+      const subtitle = options.subtitle || node.label_zh || node.secondary || node.neutral_citation || "";
+      const chips = [];
+      if (options.metrics) chips.push(...options.metrics.map(microChip));
+      if (options.path) chips.push(microChip(options.path));
+      button.innerHTML = `
+        <span class="node-kicker">${{escapeHtml(options.kicker || labelForType(node.type || ""))}}</span>
+        <strong class="node-name">${{escapeHtml(node.label || node.case_name || node.title || node.id)}}</strong>
+        ${{subtitle ? `<span class="node-subtitle">${{escapeHtml(subtitle)}}</span>` : ""}}
+        ${{chips.length ? `<div class="chip-row">${{chips.join("")}}</div>` : ""}}
+      `;
+      button.addEventListener("click", () => selectNode(node.id));
+      return button;
+    }}
+
+    function topicIdsForNode(node) {{
+      if (!node) return [];
+      if (node.type === "Topic") return [node.id];
+      if (node.type === "Subground") return node.topic_ids || [];
+      if (node.type === "Module") return (node.subgrounds || []).flatMap((subground) => subground.topic_ids || []);
+      if (node.type === "AuthorityLineage") {{
+        return (outgoing.get(node.id) || []).filter((edge) => edge.type === "ABOUT_TOPIC").map((edge) => edge.target);
+      }}
+      if (node.type === "Case" || node.type === "Statute") {{
+        return (outgoing.get(node.id) || []).filter((edge) => edge.type === "BELONGS_TO_TOPIC").map((edge) => edge.target);
+      }}
+      if (node.type === "Paragraph") {{
+        const caseEdge = (outgoing.get(node.id) || []).find((edge) => edge.type === "PART_OF");
+        return caseEdge ? topicIdsForNode(nodeMap.get(caseEdge.target)) : [];
+      }}
+      if (node.type === "Proposition") {{
+        const paragraphEdge = (incoming.get(node.id) || []).find((edge) => edge.type === "SUPPORTS");
+        return paragraphEdge ? topicIdsForNode(nodeMap.get(paragraphEdge.source)) : [];
+      }}
+      return [];
+    }}
+
+    function inferContext(node) {{
+      if (!node) return {{ moduleId: state.moduleId, subgroundId: state.subgroundId }};
+      if (node.type === "Module") {{
+        return {{ moduleId: node.id, subgroundId: node.subgrounds?.[0]?.id || null }};
+      }}
+      if (node.type === "Subground") {{
+        return {{ moduleId: node.module_id, subgroundId: node.id }};
+      }}
+      if (node.type === "Topic") {{
+        return {{ moduleId: node.module_id, subgroundId: node.subground_id }};
+      }}
+      const topicId = topicIdsForNode(node)[0];
+      const topic = topicId ? nodeMap.get(topicId) : null;
+      if (topic) {{
+        return {{ moduleId: topic.module_id, subgroundId: topic.subground_id }};
+      }}
+      return {{ moduleId: state.moduleId, subgroundId: state.subgroundId }};
+    }}
+
+    function selectNode(id) {{
+      const node = getNode(id);
+      const context = inferContext(node);
+      state.moduleId = context.moduleId;
+      state.subgroundId = context.subgroundId;
+      state.selectedId = id;
+      render();
+    }}
+
+    function neighborsByType(id, types) {{
+      const wanted = new Set(Array.isArray(types) ? types : [types]);
+      const neighbors = [];
+      (outgoing.get(id) || []).forEach((edge) => {{
+        const target = nodeMap.get(edge.target);
+        if (target && wanted.has(target.type)) neighbors.push(target);
+      }});
+      (incoming.get(id) || []).forEach((edge) => {{
+        const source = nodeMap.get(edge.source);
+        if (source && wanted.has(source.type)) neighbors.push(source);
+      }});
+      return neighbors.filter((node, index, list) => list.findIndex((candidate) => candidate.id === node.id) === index);
+    }}
+
+    function relatedCasesForTopic(topicId) {{
+      return (incoming.get(topicId) || [])
+        .filter((edge) => edge.type === "BELONGS_TO_TOPIC")
+        .map((edge) => nodeMap.get(edge.source))
+        .filter((node) => node && node.type === "Case")
+        .sort((left, right) => (right.authority_score || 0) - (left.authority_score || 0) || (left.label || "").localeCompare(right.label || ""));
+    }}
+
+    function relatedStatutesForTopic(topicId) {{
+      return (incoming.get(topicId) || [])
+        .filter((edge) => edge.type === "BELONGS_TO_TOPIC")
+        .map((edge) => nodeMap.get(edge.source))
+        .filter((node) => node && node.type === "Statute")
+        .sort((left, right) => (left.label || "").localeCompare(right.label || ""));
+    }}
+
+    function relatedLineagesForTopic(topicId) {{
+      return (incoming.get(topicId) || [])
+        .filter((edge) => edge.type === "ABOUT_TOPIC")
+        .map((edge) => nodeMap.get(edge.source))
+        .filter(Boolean)
+        .sort((left, right) => (left.label || "").localeCompare(right.label || ""));
+    }}
+
+    function relatedSourcesForTopic(topicId) {{
+      return (incoming.get(topicId) || [])
+        .filter((edge) => edge.type === "MENTIONS")
+        .map((edge) => nodeMap.get(edge.source))
+        .filter(Boolean);
+    }}
+
+    function renderMetricStrip() {{
+      const metrics = [
+        ["Modules", modules.length],
+        ["Topics", payload.meta.topic_count || topics.length],
+        ["Cases", payload.meta.case_count || cases.length],
+        ["Statutes", payload.meta.statute_count || statutes.length],
+        ["Lineages", payload.meta.lineage_count || lineages.length],
+      ];
+      metricStrip.innerHTML = metrics.map(([label, value]) => `<div class="metric-card"><strong>${{value}}</strong><span>${{escapeHtml(label)}}</span></div>`).join("");
+    }}
+
+    function renderBreadcrumbs() {{
+      breadcrumbsEl.innerHTML = "";
+      const trail = [rootNode];
+      const module = state.moduleId ? getNode(state.moduleId) : null;
+      const subground = state.subgroundId ? getNode(state.subgroundId) : null;
+      const selected = getNode(state.selectedId);
+      if (module) trail.push(module);
+      if (subground && subground.id !== module?.id) trail.push(subground);
+      if (selected && !trail.some((item) => item.id === selected.id)) trail.push(selected);
+
+      trail.forEach((node) => {{
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "crumb";
+        button.textContent = node.label || node.case_name || node.title || node.id;
+        button.addEventListener("click", () => selectNode(node.id));
+        breadcrumbsEl.appendChild(button);
+      }});
+    }}
+
+    function renderResults(query) {{
+      const lowered = query.trim().toLowerCase();
+      resultsEl.innerHTML = "";
+      if (!lowered) return;
+      const searchables = [
+        ...modules,
+        ...subgrounds,
+        ...topics,
+        ...cases,
+        ...statutes,
+        ...lineages,
+      ];
+      const matches = searchables
+        .filter((node) => `${{node.label || ""}} ${{node.case_name || ""}} ${{node.summary || ""}}`.toLowerCase().includes(lowered))
+        .sort((left, right) => (right.degree || 0) - (left.degree || 0) || (left.label || "").localeCompare(right.label || ""))
+        .slice(0, 12);
+
+      if (!matches.length) {{
+        resultsEl.innerHTML = "<div class='empty'>No matching nodes.</div>";
+        return;
+      }}
+
+      matches.forEach((node) => {{
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "result-pill";
+        button.textContent = `${{node.label || node.case_name}} · ${{labelForType(node.type)}}`;
+        button.addEventListener("click", () => selectNode(node.id));
+        resultsEl.appendChild(button);
+      }});
+    }}
+
+    function renderAuthorityLineage(lineage) {{
+      const panel = document.createElement("article");
+      panel.className = "lineage-panel";
+      panel.innerHTML = `<div class="branch-head"><h3>${{escapeHtml(lineage.title || lineage.label)}}</h3><div class="branch-meta">${{escapeHtml((lineage.codes || []).join(" · ") || "authority lineage")}}</div></div>`;
+      const track = document.createElement("div");
+      track.className = "lineage-track";
+      const members = (outgoing.get(lineage.id) || [])
+        .filter((edge) => edge.type === "HAS_MEMBER")
+        .sort((left, right) => (left.position || 0) - (right.position || 0));
+      members.forEach((edge) => {{
+        const node = nodeMap.get(edge.target);
+        if (!node) return;
+        const step = document.createElement("div");
+        step.className = "lineage-step";
+        step.appendChild(createNodeCard(node, {{
+          kicker: edge.code || labelForType(node.type),
+          subtitle: edge.note || node.neutral_citation || node.summary_en || "",
+          metrics: node.type === "Case"
+            ? [`Authority ${{(node.authority_score || 0).toFixed(2)}}`]
+            : [],
+        }}));
+        track.appendChild(step);
+      }});
+      panel.appendChild(track);
+      return panel;
+    }}
+
+    function renderAuxPanel(title, caption, items, builder) {{
+      if (!items.length) return null;
+      const panel = document.createElement("article");
+      panel.className = "aux-panel";
+      panel.innerHTML = `<div class="branch-head"><h3>${{escapeHtml(title)}}</h3><div class="branch-meta">${{escapeHtml(caption)}}</div></div>`;
+      const grid = document.createElement("div");
+      grid.className = "aux-grid";
+      items.forEach((item) => grid.appendChild(builder(item)));
+      panel.appendChild(grid);
+      return panel;
+    }}
+
+    function currentModule() {{
+      return state.moduleId ? getNode(state.moduleId) : null;
+    }}
+
+    function currentSubground() {{
+      return state.subgroundId ? getNode(state.subgroundId) : null;
+    }}
+
+    function renderTree() {{
+      treeStack.innerHTML = "";
+
+      const rootSection = makeSection("Overview", "hybrid hierarchy");
+      const rootWrap = document.createElement("div");
+      rootWrap.className = "root-wrap";
+      rootWrap.appendChild(createNodeCard(rootNode, {{
+        kicker: "Root",
+        subtitle: rootNode.secondary,
+        metrics: [`${{modules.length}} modules`, `${{topics.length}} topics`, `${{cases.length}} cases`],
+      }}));
+      rootSection.appendChild(rootWrap);
+      treeStack.appendChild(rootSection);
+
+      const moduleSection = makeSection("Lifecycle Modules", "module layer");
+      const moduleRow = document.createElement("div");
+      moduleRow.className = "node-grid";
+      modules.forEach((module) => {{
+        moduleRow.appendChild(createNodeCard(module, {{
+          kicker: "Module",
+          subtitle: module.label_zh || module.summary || "",
+          metrics: [
+            `${{module.metrics?.subgrounds || module.subgrounds.length}} subgrounds`,
+            `${{module.metrics?.cases || 0}} cases`,
+            `${{module.metrics?.lineages || 0}} lineages`,
+          ],
+        }}));
+      }});
+      moduleSection.appendChild(moduleRow);
+      treeStack.appendChild(moduleSection);
+
+      const module = currentModule();
+      if (!module) return;
+
+      const subgroundSection = makeSection(module.label, "subground layer");
+      const subgroundGrid = document.createElement("div");
+      subgroundGrid.className = "node-grid";
+      (module.subgrounds || []).forEach((subground) => {{
+        subgroundGrid.appendChild(createNodeCard(subground, {{
+          kicker: "Subground",
+          subtitle: subground.label_zh || subground.summary || "",
+          metrics: [
+            `${{subground.metrics?.topics || (subground.topic_ids || []).length}} topics`,
+            `${{subground.metrics?.cases || 0}} cases`,
+            `${{subground.metrics?.lineages || 0}} lineages`,
+          ],
+        }}));
+      }});
+      subgroundSection.appendChild(subgroundGrid);
+      treeStack.appendChild(subgroundSection);
+
+      const subground = currentSubground();
+      if (!subground) return;
+
+      const subgroundTopics = (subground.topic_ids || [])
+        .map((topicId) => nodeMap.get(topicId))
+        .filter(Boolean)
+        .sort((left, right) => (left.label || "").localeCompare(right.label || ""));
+
+      const topicSection = makeSection(subground.label, "topic layer");
+      const topicGrid = document.createElement("div");
+      topicGrid.className = "node-grid";
+      subgroundTopics.forEach((topic) => {{
+        topicGrid.appendChild(createNodeCard(topic, {{
+          kicker: "Topic",
+          subtitle: topic.summary || "",
+          metrics: [
+            `${{relatedCasesForTopic(topic.id).length}} cases`,
+            `${{relatedStatutesForTopic(topic.id).length}} statutes`,
+            `${{relatedLineagesForTopic(topic.id).length}} lineages`,
+          ],
+          path: topic.path || "",
+        }}));
+      }});
+      topicSection.appendChild(topicGrid);
+      treeStack.appendChild(topicSection);
+
+      const selected = getNode(state.selectedId);
+      const focusTopicIds = selected?.type === "Topic"
+        ? [selected.id]
+        : topicIdsForNode(selected).filter((topicId, index, list) => list.indexOf(topicId) === index);
+      const focusTopics = focusTopicIds.length ? focusTopicIds.map((topicId) => nodeMap.get(topicId)).filter(Boolean) : subgroundTopics.slice(0, 1);
+      if (!focusTopics.length) return;
+
+      const authoritySection = makeSection("Authority Branches", "graph-native authorities under the chosen hierarchy branch");
+      const authorityGrid = document.createElement("div");
+      authorityGrid.className = "lineage-grid";
+
+      focusTopics.slice(0, 2).forEach((topic) => {{
+        const lineagesForTopic = relatedLineagesForTopic(topic.id);
+        const topicCases = relatedCasesForTopic(topic.id).slice(0, 10);
+        const topicStatutes = relatedStatutesForTopic(topic.id).slice(0, 8);
+        const topicSources = relatedSourcesForTopic(topic.id).slice(0, 6);
+
+        const topicPanel = document.createElement("article");
+        topicPanel.className = "aux-panel";
+        topicPanel.innerHTML = `<div class="branch-head"><h3>${{escapeHtml(topic.label)}}</h3><div class="branch-meta">${{escapeHtml(topic.path || "topic branch")}}</div></div>`;
+        const grid = document.createElement("div");
+        grid.className = "aux-grid";
+        topicCases.slice(0, 4).forEach((caseNode) => {{
+          grid.appendChild(createNodeCard(caseNode, {{
+            kicker: "Case",
+            subtitle: caseNode.neutral_citation || caseNode.summary_en || "",
+            metrics: [`Authority ${{(caseNode.authority_score || 0).toFixed(2)}}`],
+          }}));
+        }});
+        if (!topicCases.length) {{
+          grid.innerHTML = "<div class='empty'>No cases mapped to this topic.</div>";
+        }}
+        topicPanel.appendChild(grid);
+        authorityGrid.appendChild(topicPanel);
+
+        lineagesForTopic.forEach((lineage) => authorityGrid.appendChild(renderAuthorityLineage(lineage)));
+
+        const statutesPanel = renderAuxPanel("Statutes", "statutory authorities", topicStatutes, (statuteNode) =>
+          createNodeCard(statuteNode, {{
+            kicker: "Statute",
+            subtitle: statuteNode.summary_en || statuteNode.label,
+          }})
+        );
+        if (statutesPanel) authorityGrid.appendChild(statutesPanel);
+
+        const sourcesPanel = renderAuxPanel("Sources", "source documents mentioning this topic", topicSources, (sourceNode) =>
+          createNodeCard(sourceNode, {{
+            kicker: "Source",
+            subtitle: sourceNode.kind || sourceNode.path || "",
+          }})
+        );
+        if (sourcesPanel) authorityGrid.appendChild(sourcesPanel);
+      }});
+
+      authoritySection.appendChild(authorityGrid);
+      treeStack.appendChild(authoritySection);
+    }}
+
+    function renderList(target, items, emptyText, clickable = false) {{
+      target.innerHTML = "";
+      if (!items.length) {{
+        target.innerHTML = `<li class="empty">${{escapeHtml(emptyText)}}</li>`;
+        return;
+      }}
+      items.forEach((item) => {{
+        const li = document.createElement("li");
+        if (clickable && item.id) li.className = "clickable";
+        li.innerHTML = item.html;
+        if (clickable && item.id) li.addEventListener("click", () => selectNode(item.id));
+        target.appendChild(li);
+      }});
+    }}
+
+    function renderDetails(node) {{
+      const selected = node || rootNode;
+      detailTitle.textContent = selected.label || selected.case_name || selected.title || selected.id;
+      detailType.textContent = labelForType(selected.type);
+      detailSummary.textContent = selected.summary || selected.summary_en || rootNode.summary;
+      detailChips.innerHTML = "";
+
+      const facts = [];
+      const neighbors = [];
+      const support = [];
+
+      if (selected.type === "Root") {{
+        detailChips.innerHTML = [
+          `<span class="detail-chip">${{modules.length}} modules</span>`,
+          `<span class="detail-chip">${{topics.length}} topics</span>`,
+          `<span class="detail-chip">${{cases.length}} cases</span>`,
+        ].join("");
+        facts.push({{ html: `${{payload.meta.edge_count || edges.length}} graph edges across the hybrid bundle.` }});
+        facts.push({{ html: `${{payload.meta.enriched_case_count || Object.keys(caseCards).length}} enriched case cards are available for drill-down.` }});
+      }} else if (selected.type === "Module") {{
+        detailChips.innerHTML = `<span class="detail-chip">${{selected.label_zh || "Module"}}</span>`;
+        facts.push({{ html: `${{selected.subgrounds?.length || 0}} subgrounds in this module.` }});
+        (selected.subgrounds || []).forEach((subground) => neighbors.push({{
+          id: subground.id,
+          html: `<strong>${{escapeHtml(subground.label)}}</strong><div>${{escapeHtml((subground.topic_ids || []).length + " topics")}}</div>`,
+        }}));
+      }} else if (selected.type === "Subground") {{
+        detailChips.innerHTML = `<span class="detail-chip">${{selected.label_zh || "Subground"}}</span>`;
+        facts.push({{ html: `${{(selected.topic_ids || []).length}} topics are grouped under this branch.` }});
+        (selected.topic_ids || []).map((topicId) => nodeMap.get(topicId)).filter(Boolean).forEach((topic) => neighbors.push({{
+          id: topic.id,
+          html: `<strong>${{escapeHtml(topic.label)}}</strong><div>${{escapeHtml(topic.path || "")}}</div>`,
+        }}));
+      }} else if (selected.type === "Topic") {{
+        detailChips.innerHTML = `<span class="detail-chip">${{selected.path || "Topic branch"}}</span>`;
+        facts.push({{ html: `${{relatedCasesForTopic(selected.id).length}} cases linked to this topic.` }});
+        facts.push({{ html: `${{relatedStatutesForTopic(selected.id).length}} statutes linked to this topic.` }});
+        facts.push({{ html: `${{relatedLineagesForTopic(selected.id).length}} curated lineages linked to this topic.` }});
+        relatedCasesForTopic(selected.id).slice(0, 10).forEach((caseNode) => neighbors.push({{
+          id: caseNode.id,
+          html: `<strong>${{escapeHtml(caseNode.case_name || caseNode.label)}}</strong><div>${{escapeHtml(caseNode.neutral_citation || ("Authority score " + (caseNode.authority_score || 0).toFixed(2)))}}</div>`,
+        }}));
+        relatedLineagesForTopic(selected.id).forEach((lineage) => support.push({{
+          id: lineage.id,
+          html: `<strong>${{escapeHtml(lineage.title || lineage.label)}}</strong><div>${{escapeHtml((lineage.codes || []).join(" · "))}}</div>`,
+        }}));
+      }} else if (selected.type === "Case") {{
+        const card = caseCards[selected.id];
+        detailSummary.textContent = selected.summary_en || selected.summary || selected.case_name || selected.label;
+        detailChips.innerHTML = [
+          selected.neutral_citation ? `<span class="detail-chip">${{escapeHtml(selected.neutral_citation)}}</span>` : "",
+          `<span class="detail-chip">Authority ${{(selected.authority_score || 0).toFixed(2)}}</span>`,
+        ].join("");
+        facts.push({{ html: `${{selected.topic_paths?.length || 0}} topic paths attached to this case.` }});
+        facts.push({{ html: `${{selected.lineage_ids?.length || 0}} curated lineage memberships.` }});
+        selected.topic_paths?.slice(0, 8).forEach((path) => support.push({{ html: `<strong>Topic Path</strong><div>${{escapeHtml(path)}}</div>` }}));
+        (card?.relationships || []).slice(0, 10).forEach((relationship) => neighbors.push({{
+          id: relationship.target_id,
+          html: `<strong>${{escapeHtml(relationship.target_label)}}</strong><div>${{escapeHtml(relationship.type + (relationship.explanation ? " · " + relationship.explanation : ""))}}</div>`,
+        }}));
+        (card?.principles || []).slice(0, 8).forEach((principle) => support.push({{
+          html: `<strong>${{escapeHtml(principle.label_en || principle.paragraph_span || "Principle")}}</strong><div>${{escapeHtml(principle.statement_en || principle.public_excerpt || "")}}</div>`,
+        }}));
+      }} else if (selected.type === "AuthorityLineage") {{
+        detailChips.innerHTML = `<span class="detail-chip">${{escapeHtml((selected.codes || []).join(" · ") || "Lineage")}}</span>`;
+        const members = (outgoing.get(selected.id) || []).filter((edge) => edge.type === "HAS_MEMBER");
+        facts.push({{ html: `${{members.length}} members in this authority path.` }});
+        members.forEach((edge) => {{
+          const member = nodeMap.get(edge.target);
+          if (!member) return;
+          support.push({{
+            id: member.id,
+            html: `<strong>${{escapeHtml(member.label || member.case_name)}}</strong><div>${{escapeHtml(edge.code || edge.treatment || edge.note || labelForType(member.type))}}</div>`,
+          }});
+        }});
+      }} else if (selected.type === "Statute") {{
+        detailSummary.textContent = selected.summary_en || selected.label;
+        facts.push({{ html: `${{topicIdsForNode(selected).length}} topic links from this statute.` }});
+        topicIdsForNode(selected).forEach((topicId) => {{
+          const topic = nodeMap.get(topicId);
+          if (!topic) return;
+          neighbors.push({{
+            id: topic.id,
+            html: `<strong>${{escapeHtml(topic.label)}}</strong><div>${{escapeHtml(topic.path || "")}}</div>`,
+          }});
+        }});
+      }}
+
+      renderList(detailFacts, facts, "No metrics available for this node.");
+      renderList(detailNeighbors, neighbors, "No related authorities for this node.", true);
+      renderList(detailSupport, support, "No principles or lineage data for this node.", true);
+    }}
+
+    function render() {{
+      renderMetricStrip();
+      renderBreadcrumbs();
+      renderTree();
+      renderDetails(getNode(state.selectedId));
+      renderResults(searchInput.value);
+    }}
+
+    searchInput.addEventListener("input", (event) => renderResults(event.target.value));
+    render();
+  </script>
+</body>
+</html>"""

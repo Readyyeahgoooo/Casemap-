@@ -13,6 +13,7 @@ if str(SRC_DIR) not in sys.path:
 from casemap.graphrag import RerankedRetriever
 from casemap.hybrid_graph import HybridGraphStore
 from casemap.internal_viewer import render_internal_graph_explorer
+from casemap.viewer import render_hybrid_hierarchy
 
 MVP_ARTIFACT_DIR = BASE_DIR / "artifacts" / "contract_big"
 MVP_GRAPH_PATH = MVP_ARTIFACT_DIR / "graph.json"
@@ -96,6 +97,7 @@ def _not_found(start_response) -> list[bytes]:
         "routes": [
             "/",
             "/tree",
+            "/internal",
             "/mvp",
             "/relationships",
             "/health",
@@ -122,7 +124,7 @@ def app(environ, start_response):
 
     if path in {"/", "/index.html", "/tree"}:
         if hybrid_store is not None:
-            return _html_response(start_response, render_internal_graph_explorer(hybrid_store.manifest()["title"]))
+            return _html_response(start_response, render_hybrid_hierarchy(hybrid_store.bundle))
         if PUBLIC_RELATIONSHIP_TREE_PATH.exists():
             return _html_response(start_response, _load_text(PUBLIC_RELATIONSHIP_TREE_PATH))
         if PUBLIC_RELATIONSHIP_MAP_PATH.exists():
@@ -134,6 +136,15 @@ def app(environ, start_response):
             "<h1>Casemap</h1><p>No public artifact is available in this deployment.</p>",
             status="503 Service Unavailable",
         )
+
+    if path in {"/internal", "/explorer"}:
+        if hybrid_store is None:
+            return _html_response(
+                start_response,
+                "<h1>Casemap</h1><p>The internal explorer is unavailable because the hybrid graph artifact is missing.</p>",
+                status="503 Service Unavailable",
+            )
+        return _html_response(start_response, render_internal_graph_explorer(hybrid_store.manifest()["title"]))
 
     if path == "/relationships":
         if PUBLIC_RELATIONSHIP_MAP_PATH.exists():
