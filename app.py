@@ -255,13 +255,29 @@ def app(environ, start_response):
             body = _read_json_body(environ)
             question = str(body.get("question", "")).strip()
             top_k_raw = body.get("top_k", 5)
+            mode = str(body.get("mode", "extractive")).strip() or "extractive"
+            model = str(body.get("model", "")).strip()
+            max_citations_raw = body.get("max_citations", 8)
             try:
                 top_k = max(1, min(int(top_k_raw), 10))
             except (TypeError, ValueError):
                 top_k = 5
+            try:
+                max_citations = max(2, min(int(max_citations_raw), 20))
+            except (TypeError, ValueError):
+                max_citations = 8
             if not question:
                 return _json_response(start_response, {"error": "Missing question"}, status="400 Bad Request")
-            return _json_response(start_response, hybrid_store.query(question, top_k=top_k))
+            return _json_response(
+                start_response,
+                hybrid_store.query(
+                    question,
+                    top_k=top_k,
+                    mode=mode,
+                    model=model,
+                    max_citations=max_citations,
+                ),
+            )
 
         if method != "GET":
             return _json_response(start_response, {"error": "Method not allowed"}, status="405 Method Not Allowed")

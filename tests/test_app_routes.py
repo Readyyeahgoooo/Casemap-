@@ -44,6 +44,8 @@ class AppRouteTests(unittest.TestCase):
         self.assertIn('id="hierarchyCanvas"', body)
         self.assertIn("Visual Hierarchy Graph", body)
         self.assertIn('href="/internal" class="active"', body)
+        self.assertIn('id="graphRagForm"', body)
+        self.assertIn("GraphRAG Inquiry Panel", body)
 
 
 if __name__ == "__main__":

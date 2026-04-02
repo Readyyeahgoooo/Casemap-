@@ -5,7 +5,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 import json
 import math
+import os
 import re
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 from .case_enrichment_data import CURATED_CASE_ENRICHMENTS
 from .graphrag import normalize_scores, slugify, tokenize
@@ -60,6 +63,11 @@ YIELD rel
 RETURN count(rel) AS merged_relationships;
 """
 
+OPENROUTER_API_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_DEFAULT_MODEL = "openrouter/auto"
+OPENROUTER_TIMEOUT_SECONDS = 25
+OPENROUTER_CITATION_TAG_RE = re.compile(r"\[(C\d+)\]")
+
 
 def _normalize_label(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
@@ -88,6 +96,103 @@ def _court_score(court_level: str, lineage_count: int, typed_links: int, degree:
     base = COURT_LEVEL_SCORES.get(court_level.upper(), 0.25) if court_level else 0.25
     score = base + (0.08 * min(lineage_count, 4)) + (0.03 * min(typed_links, 8)) + (0.01 * min(degree, 15))
     return round(min(score, 1.6), 4)
+
+
+def _extract_openrouter_message_text(content: object) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            text = part.get("text") or part.get("content")
+            if isinstance(text, str) and text.strip():
+                parts.append(text.strip())
+        return "\n".join(parts).strip()
+    return ""
+
+
+def _openrouter_grounded_answer(question: str, citations: list[dict], model: str = "") -> tuple[str, str]:
+    api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not configured")
+    if not citations:
+        raise RuntimeError("No citations available for grounded synthesis")
+
+    selected_model = model.strip() or os.environ.get("OPENROUTER_MODEL", "").strip() or OPENROUTER_DEFAULT_MODEL
+    evidence_lines = []
+    for citation in citations:
+        evidence_lines.append(
+            (
+                f"[{citation['citation_id']}] "
+                f"Case: {citation.get('case_name', '')} {citation.get('neutral_citation', '')}\n"
+                f"Paragraph: {citation.get('paragraph_span', '') or 'n/a'}\n"
+                f"Quote: {citation.get('quote', '')}"
+            ).strip()
+        )
+
+    payload = {
+        "model": selected_model,
+        "temperature": 0,
+        "top_p": 1,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a legal GraphRAG synthesis assistant. Answer using only the provided evidence. "
+                    "Do not invent cases, statutes, facts, or paragraphs. Every factual sentence must end with one or more "
+                    "citation tags like [C1]. If evidence is insufficient, explicitly say so."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Question:\n{question.strip()}\n\n"
+                    "Evidence:\n"
+                    + "\n\n".join(evidence_lines)
+                    + "\n\nReturn a concise legal analysis grounded only in the evidence above."
+                ),
+            },
+        ],
+    }
+
+    request = urllib_request.Request(
+        OPENROUTER_API_ENDPOINT,
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib_request.urlopen(request, timeout=OPENROUTER_TIMEOUT_SECONDS) as response:
+            raw = response.read().decode("utf-8")
+    except urllib_error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore") if hasattr(exc, "read") else ""
+        raise RuntimeError(f"OpenRouter HTTP {exc.code}: {body[:240]}".strip()) from exc
+    except urllib_error.URLError as exc:
+        raise RuntimeError(f"OpenRouter request failed: {exc.reason}") from exc
+
+    parsed = json.loads(raw)
+    choices = parsed.get("choices", [])
+    if not choices:
+        raise RuntimeError("OpenRouter returned no choices")
+    message = choices[0].get("message", {})
+    answer = _extract_openrouter_message_text(message.get("content", ""))
+    if not answer:
+        raise RuntimeError("OpenRouter returned an empty message")
+
+    valid_ids = {citation["citation_id"] for citation in citations}
+    cited_ids = set(OPENROUTER_CITATION_TAG_RE.findall(answer))
+    if not cited_ids:
+        raise RuntimeError("OpenRouter response did not include citation tags")
+    if not cited_ids.issubset(valid_ids):
+        unknown = sorted(cited_ids - valid_ids)
+        raise RuntimeError(f"OpenRouter response referenced unknown citations: {', '.join(unknown)}")
+    return answer.strip(), selected_model
 
 
 def _code_to_edge_type(code: str, fallback_treatment: str = "") -> str:
@@ -1060,14 +1165,41 @@ class HybridGraphStore:
             "focus_graph": self.focus_graph(topic_id, depth=1),
         }
 
-    def query(self, question: str, top_k: int = 5) -> dict:
+    def query(
+        self,
+        question: str,
+        top_k: int = 5,
+        mode: str = "extractive",
+        model: str = "",
+        max_citations: int = 8,
+    ) -> dict:
+        try:
+            bounded_top_k = max(1, min(int(top_k), 10))
+        except (TypeError, ValueError):
+            bounded_top_k = 5
+        try:
+            bounded_max_citations = max(2, min(int(max_citations), 20))
+        except (TypeError, ValueError):
+            bounded_max_citations = 8
+        requested_mode = (mode or "extractive").strip().lower()
         query_tokens = tokenize(question)
         if not query_tokens:
             return {
+                "question": question.strip(),
                 "answer": "No usable legal terms were found in the query.",
+                "answer_mode": "extractive",
                 "sources": [],
+                "citations": [],
                 "authority_path": [],
                 "supporting_nodes": [],
+                "retrieval_trace": {"query_tokens": [], "matched_node_ids": []},
+                "warnings": [],
+                "llm": {
+                    "requested": requested_mode == "openrouter",
+                    "used": False,
+                    "provider": "openrouter",
+                    "model": model.strip() or os.environ.get("OPENROUTER_MODEL", "").strip() or OPENROUTER_DEFAULT_MODEL,
+                },
             }
 
         searchable: list[tuple[str, str, str]] = []
@@ -1095,9 +1227,9 @@ class HybridGraphStore:
             node_id
             for node_id in sorted(lexical_norm, key=lexical_norm.get, reverse=True)
             if lexical_norm[node_id] > 0
-        ][: max(top_k * 2, 8)]
+        ][: max(bounded_top_k * 2, 8)]
 
-        supporting_node_ids: set[str] = set(best_node_ids[:top_k])
+        supporting_node_ids: set[str] = set(best_node_ids[:bounded_top_k])
         support_case_ids: set[str] = set()
         support_case_scores: defaultdict[str, float] = defaultdict(float)
         for node_id in best_node_ids[:6]:
@@ -1147,26 +1279,80 @@ class HybridGraphStore:
                 lexical_norm.get(card["id"], 0.0),
             ),
             reverse=True,
-        )[:top_k]
+        )[:bounded_top_k]
 
-        principles = [
-            principle
-            for card in support_cases
-            for principle in card.get("principles", [])[:2]
-        ][:3]
-        if principles:
-            answer_bits = [principle["statement_en"] for principle in principles]
-            answer = " ".join(answer_bits)
+        citation_pool: list[dict] = []
+        for card in support_cases:
+            case_score = support_case_scores.get(card["id"], 0.0)
+            lineage_titles = sorted({entry["lineage_title"] for entry in card.get("lineage_memberships", []) if entry.get("lineage_title")})
+            principles = card.get("principles", [])
+            if principles:
+                for position, principle in enumerate(principles[:3], start=1):
+                    quote = (principle.get("statement_en") or principle.get("public_excerpt") or "").strip()
+                    if not quote:
+                        continue
+                    citation_pool.append(
+                        {
+                            "case_id": card["id"],
+                            "focus_node_id": card["id"],
+                            "case_name": card["metadata"]["case_name"],
+                            "neutral_citation": card["metadata"]["neutral_citation"],
+                            "paragraph_span": principle.get("paragraph_span", ""),
+                            "principle_label": principle.get("label_en", ""),
+                            "quote": quote,
+                            "lineage_titles": lineage_titles,
+                            "support_score": round(case_score + (0.06 / position), 6),
+                        }
+                    )
+            else:
+                summary = (card["metadata"].get("summary_en") or "").strip()
+                if summary:
+                    citation_pool.append(
+                        {
+                            "case_id": card["id"],
+                            "focus_node_id": card["id"],
+                            "case_name": card["metadata"]["case_name"],
+                            "neutral_citation": card["metadata"]["neutral_citation"],
+                            "paragraph_span": "",
+                            "principle_label": "",
+                            "quote": summary,
+                            "lineage_titles": lineage_titles,
+                            "support_score": round(case_score, 6),
+                        }
+                    )
+
+        citations = sorted(
+            citation_pool,
+            key=lambda item: (item["support_score"], len(item["quote"]), item["case_name"]),
+            reverse=True,
+        )[:bounded_max_citations]
+        for index, citation in enumerate(citations, start=1):
+            citation["citation_id"] = f"C{index}"
+
+        if citations:
+            extractive_answer = " ".join(
+                f"[{citation['citation_id']}] {citation['quote']}"
+                for citation in citations[: min(3, len(citations))]
+            ).strip()
         elif support_cases:
-            answer = " ".join(
+            extractive_answer = " ".join(
                 card["metadata"]["summary_en"]
                 for card in support_cases[:2]
                 if card["metadata"]["summary_en"] and not card["metadata"]["summary_en"].startswith("Case linked to")
-            ).strip()
-            if not answer:
-                answer = " ".join(card["metadata"]["summary_en"] for card in support_cases[:2] if card["metadata"]["summary_en"])
+            ).strip() or "No paragraph-level evidence was found for this query, but related cases were retrieved."
         else:
-            answer = "No sufficiently relevant authority path was found in the current graph bundle."
+            extractive_answer = "No sufficiently relevant authority path was found in the current graph bundle."
+
+        answer_mode = "extractive"
+        resolved_model = model.strip() or os.environ.get("OPENROUTER_MODEL", "").strip() or OPENROUTER_DEFAULT_MODEL
+        warnings: list[str] = []
+        answer = extractive_answer
+        if requested_mode == "openrouter":
+            try:
+                answer, resolved_model = _openrouter_grounded_answer(question, citations, model=model)
+                answer_mode = "openrouter_grounded"
+            except Exception as exc:  # pragma: no cover - exercised only when OpenRouter mode is requested.
+                warnings.append(f"OpenRouter synthesis skipped: {exc}")
 
         authority_path = []
         for card in support_cases:
@@ -1194,22 +1380,31 @@ class HybridGraphStore:
             ]
 
         sources = []
-        for card in support_cases:
-            first_principle = card["principles"][0] if card["principles"] else None
+        seen_cases: set[str] = set()
+        for citation in citations:
+            case_id = citation["case_id"]
+            if case_id in seen_cases:
+                continue
+            seen_cases.add(case_id)
+            card = next((entry for entry in support_cases if entry["id"] == case_id), None)
             sources.append(
                 {
-                    "case_id": card["id"],
-                    "case_name": card["metadata"]["case_name"],
-                    "neutral_citation": card["metadata"]["neutral_citation"],
-                    "paragraph_span": first_principle.get("paragraph_span", "") if first_principle else "",
-                    "text": first_principle.get("statement_en", card["metadata"]["summary_en"]) if first_principle else card["metadata"]["summary_en"],
-                    "links": card["metadata"]["source_links"],
+                    "case_id": case_id,
+                    "case_name": citation["case_name"],
+                    "neutral_citation": citation["neutral_citation"],
+                    "paragraph_span": citation["paragraph_span"],
+                    "text": citation["quote"],
+                    "links": card["metadata"]["source_links"] if card else [],
+                    "citation_ids": [entry["citation_id"] for entry in citations if entry["case_id"] == case_id],
                 }
             )
 
         return {
+            "question": question.strip(),
             "answer": answer.strip(),
+            "answer_mode": answer_mode,
             "sources": sources,
+            "citations": citations,
             "authority_path": authority_path,
             "supporting_nodes": [
                 {
@@ -1220,4 +1415,23 @@ class HybridGraphStore:
                 for node_id in sorted(supporting_node_ids)
                 if node_id in self.nodes
             ][:25],
+            "retrieval_trace": {
+                "query_tokens": query_tokens[:24],
+                "matched_node_ids": best_node_ids[:12],
+                "top_case_scores": [
+                    {
+                        "case_id": card["id"],
+                        "case_name": card["metadata"]["case_name"],
+                        "support_score": round(support_case_scores.get(card["id"], 0.0), 6),
+                    }
+                    for card in support_cases
+                ],
+            },
+            "warnings": warnings,
+            "llm": {
+                "requested": requested_mode == "openrouter",
+                "used": answer_mode == "openrouter_grounded",
+                "provider": "openrouter",
+                "model": resolved_model,
+            },
         }

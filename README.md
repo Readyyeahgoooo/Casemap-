@@ -110,7 +110,17 @@ Internal routes:
 - `GET /api/topic/{topic_id}`
 - `GET /api/case/{case_id}`
 - `GET /api/graph/focus?id={node_id}&depth=1`
-- `POST /api/query`
+- `POST /api/query` (supports `question`, `top_k`, `max_citations`, `mode`, `model`)
+
+GraphRAG query modes:
+
+- `mode=extractive` returns citation-first answers directly from case/principle evidence.
+- `mode=openrouter` attempts grounded synthesis through OpenRouter and falls back to extractive mode when unavailable.
+
+Optional OpenRouter environment variables:
+
+- `OPENROUTER_API_KEY`
+- `OPENROUTER_MODEL` (defaults to `openrouter/auto`)
 
 ## Design
 

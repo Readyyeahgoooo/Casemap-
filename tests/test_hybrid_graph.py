@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from casemap.hybrid_graph import HybridGraphStore, build_hierarchical_graph_bundle, export_public_projection
 
@@ -72,8 +74,21 @@ class HybridGraphTests(unittest.TestCase):
     def test_query_returns_sources_and_supporting_nodes(self) -> None:
         result = self.store.query("When can terms be implied into a contract in Hong Kong?", top_k=3)
         self.assertTrue(result["answer"])
+        self.assertEqual(result["answer_mode"], "extractive")
         self.assertGreaterEqual(len(result["sources"]), 1)
+        self.assertGreaterEqual(len(result["citations"]), 1)
+        self.assertTrue(result["citations"][0]["citation_id"].startswith("C"))
         self.assertGreaterEqual(len(result["supporting_nodes"]), 1)
+        self.assertIn("retrieval_trace", result)
+
+    def test_query_openrouter_mode_falls_back_when_api_key_missing(self) -> None:
+        with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": ""}, clear=False):
+            result = self.store.query("What is the modern penalty clauses approach in Hong Kong?", top_k=3, mode="openrouter")
+        self.assertTrue(result["answer"])
+        self.assertEqual(result["answer_mode"], "extractive")
+        self.assertTrue(result["llm"]["requested"])
+        self.assertFalse(result["llm"]["used"])
+        self.assertGreaterEqual(len(result["warnings"]), 1)
 
     def test_public_projection_strips_private_fields(self) -> None:
         public_projection = export_public_projection(self.bundle)

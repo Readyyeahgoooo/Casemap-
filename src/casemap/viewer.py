@@ -3859,6 +3859,175 @@ def render_hybrid_hierarchy(graph_payload: dict, page_mode: str = "hierarchy") -
       cursor: pointer;
     }}
 
+    .graphrag-shell {{
+      border-radius: 26px;
+      padding: 10px 14px 14px;
+    }}
+
+    .chat-shell {{
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.78);
+      overflow: hidden;
+    }}
+
+    .chat-shell summary {{
+      cursor: pointer;
+      list-style: none;
+      font-size: 14px;
+      letter-spacing: 0.01em;
+      padding: 14px 16px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.7);
+      border-bottom: 1px solid rgba(31, 35, 40, 0.06);
+    }}
+
+    .chat-shell summary::-webkit-details-marker {{
+      display: none;
+    }}
+
+    .chat-body {{
+      padding: 14px 16px 16px;
+      display: grid;
+      gap: 12px;
+    }}
+
+    .chat-form {{
+      display: grid;
+      gap: 10px;
+    }}
+
+    .chat-form textarea {{
+      width: 100%;
+      min-height: 88px;
+      max-height: 220px;
+      resize: vertical;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      padding: 12px;
+      font: inherit;
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--ink);
+    }}
+
+    .chat-actions {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }}
+
+    .chat-actions label {{
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.84);
+    }}
+
+    .chat-actions select,
+    .chat-actions input {{
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      min-width: 84px;
+    }}
+
+    .chat-actions input {{
+      min-width: 180px;
+    }}
+
+    .chat-actions button {{
+      border: 0;
+      border-radius: 999px;
+      padding: 9px 14px;
+      cursor: pointer;
+      background: linear-gradient(180deg, rgba(32, 78, 95, 0.96), rgba(27, 62, 75, 0.96));
+      color: white;
+      font: inherit;
+    }}
+
+    .chat-history {{
+      display: grid;
+      gap: 10px;
+    }}
+
+    .chat-entry {{
+      border: 1px solid rgba(31, 35, 40, 0.1);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.86);
+      padding: 12px 13px;
+      box-shadow: var(--shadow-soft);
+    }}
+
+    .chat-entry.user {{
+      border-color: rgba(32, 78, 95, 0.24);
+      background: rgba(232, 243, 247, 0.86);
+    }}
+
+    .chat-entry h4 {{
+      margin: 0 0 8px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }}
+
+    .chat-answer {{
+      margin: 0;
+      line-height: 1.58;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }}
+
+    .chat-citation-grid {{
+      margin-top: 10px;
+      display: grid;
+      gap: 8px;
+    }}
+
+    .chat-citation {{
+      border: 1px solid rgba(31, 35, 40, 0.1);
+      border-radius: 12px;
+      padding: 10px 11px;
+      background: rgba(255, 255, 255, 0.74);
+    }}
+
+    .chat-citation strong {{
+      display: block;
+      font-size: 13px;
+      margin-bottom: 5px;
+    }}
+
+    .chat-citation p {{
+      margin: 0 0 7px;
+      font-size: 13px;
+      line-height: 1.55;
+    }}
+
+    .chat-citation button {{
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.86);
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      color: var(--ink);
+    }}
+
+    .chat-meta {{
+      margin-top: 9px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }}
+
     .empty {{
       color: var(--muted);
       font-style: italic;
@@ -3891,6 +4060,10 @@ def render_hybrid_hierarchy(graph_payload: dict, page_mode: str = "hierarchy") -
 
       .graph-canvas {{
         height: 560px;
+      }}
+
+      .chat-actions input {{
+        min-width: 100%;
       }}
     }}
   </style>
@@ -3952,6 +4125,44 @@ def render_hybrid_hierarchy(graph_payload: dict, page_mode: str = "hierarchy") -
             </svg>
           </div>
         </div>
+      </section>
+      <section class="graph-shell graphrag-shell">
+        <details id="graphRagDetails" class="chat-shell" open>
+          <summary>GraphRAG Inquiry Panel (Evidence-Linked)</summary>
+          <div class="chat-body">
+            <form id="graphRagForm" class="chat-form">
+              <textarea id="graphRagInput" placeholder="Ask a legal question for grounded analysis (for example: When can terms be implied into a Hong Kong contract?)"></textarea>
+              <div class="chat-actions">
+                <label>Mode
+                  <select id="graphRagMode">
+                    <option value="extractive" selected>Extractive</option>
+                    <option value="openrouter">OpenRouter</option>
+                  </select>
+                </label>
+                <label>Top Cases
+                  <select id="graphRagTopK">
+                    <option value="3">3</option>
+                    <option value="5" selected>5</option>
+                    <option value="8">8</option>
+                  </select>
+                </label>
+                <label>Citations
+                  <select id="graphRagCitationLimit">
+                    <option value="4">4</option>
+                    <option value="6" selected>6</option>
+                    <option value="10">10</option>
+                  </select>
+                </label>
+                <label>Model
+                  <input id="graphRagModel" type="text" placeholder="openrouter/auto">
+                </label>
+                <button id="graphRagSubmit" type="submit">Ask GraphRAG</button>
+              </div>
+            </form>
+            <div id="graphRagStatus" class="small">This panel answers only from graph-linked evidence and returns direct case/paragraph citations.</div>
+            <div id="graphRagHistory" class="chat-history"><div class="empty">No inquiries yet.</div></div>
+          </div>
+        </details>
       </section>
       <div id="treeStack" class="stack-view"></div>
     </section>
@@ -4040,6 +4251,14 @@ def render_hybrid_hierarchy(graph_payload: dict, page_mode: str = "hierarchy") -
     const detailNeighbors = document.getElementById("detailNeighbors");
     const detailSupport = document.getElementById("detailSupport");
     const detailChips = document.getElementById("detailChips");
+    const graphRagForm = document.getElementById("graphRagForm");
+    const graphRagInput = document.getElementById("graphRagInput");
+    const graphRagMode = document.getElementById("graphRagMode");
+    const graphRagTopK = document.getElementById("graphRagTopK");
+    const graphRagCitationLimit = document.getElementById("graphRagCitationLimit");
+    const graphRagModel = document.getElementById("graphRagModel");
+    const graphRagStatus = document.getElementById("graphRagStatus");
+    const graphRagHistory = document.getElementById("graphRagHistory");
 
     const state = {{
       moduleId: modules[0]?.id || null,
@@ -4318,6 +4537,55 @@ def render_hybrid_hierarchy(graph_payload: dict, page_mode: str = "hierarchy") -
         button.addEventListener("click", () => selectNode(node.id));
         resultsEl.appendChild(button);
       }});
+    }}
+
+    function clearGraphRagEmptyState() {{
+      const emptyState = graphRagHistory.querySelector(".empty");
+      if (emptyState) emptyState.remove();
+    }}
+
+    function appendGraphRagEntry(role, html) {{
+      clearGraphRagEmptyState();
+      const card = document.createElement("article");
+      card.className = `chat-entry ${{role}}`;
+      card.innerHTML = html;
+      graphRagHistory.prepend(card);
+      card.querySelectorAll("[data-focus-node-id]").forEach((button) => {{
+        button.addEventListener("click", () => {{
+          selectNode(button.dataset.focusNodeId);
+        }});
+      }});
+    }}
+
+    function renderGraphRagCitationGrid(citations) {{
+      if (!citations.length) {{
+        return "<div class='empty'>No direct citations were returned.</div>";
+      }}
+      return `
+        <div class="chat-citation-grid">
+          ${{
+            citations.map((citation) => `
+              <div class="chat-citation">
+                <strong>[${{escapeHtml(citation.citation_id || "")}}] ${{escapeHtml(citation.case_name || "Unknown Case")}}</strong>
+                <p>${{escapeHtml(citation.quote || "")}}</p>
+                <div class="chat-meta">${{escapeHtml((citation.neutral_citation || "") + (citation.paragraph_span ? " · " + citation.paragraph_span : ""))}}</div>
+                ${{
+                  citation.focus_node_id || citation.case_id
+                    ? `<button type="button" data-focus-node-id="${{escapeHtml(citation.focus_node_id || citation.case_id)}}">Focus Node</button>`
+                    : ""
+                }}
+              </div>
+            `).join("")
+          }}
+        </div>
+      `;
+    }}
+
+    function graphRagTraceLine(payload) {{
+      const mode = payload.answer_mode || "extractive";
+      const citationCount = (payload.citations || []).length;
+      const supportingCount = (payload.supporting_nodes || []).length;
+      return `Mode: ${{mode}} · citations: ${{citationCount}} · supporting nodes: ${{supportingCount}}`;
     }}
 
     function renderAuthorityLineage(lineage) {{
@@ -4946,6 +5214,63 @@ def render_hybrid_hierarchy(graph_payload: dict, page_mode: str = "hierarchy") -
       state.expandedViewIds = createDefaultExpandedIds();
       expandGraphPathForNode(getNode(state.selectedId));
       render();
+    }});
+
+    graphRagForm.addEventListener("submit", async (event) => {{
+      event.preventDefault();
+      const question = graphRagInput.value.trim();
+      if (!question) return;
+
+      const requestBody = {{
+        question,
+        top_k: Number(graphRagTopK.value || 5),
+        mode: graphRagMode.value || "extractive",
+        max_citations: Number(graphRagCitationLimit.value || 6),
+        model: graphRagModel.value.trim(),
+      }};
+
+      appendGraphRagEntry("user", `
+        <h4>Inquiry</h4>
+        <p class="chat-answer">${{escapeHtml(question)}}</p>
+      `);
+      graphRagStatus.textContent = "Running grounded query...";
+
+      try {{
+        const response = await fetch("/api/query", {{
+          method: "POST",
+          headers: {{
+            "Content-Type": "application/json",
+          }},
+          body: JSON.stringify(requestBody),
+        }});
+        const payload = await response.json();
+        if (!response.ok) {{
+          throw new Error(payload.error || "GraphRAG query failed");
+        }}
+
+        const warningMarkup = (payload.warnings || []).length
+          ? `<div class="chat-meta">${{escapeHtml(payload.warnings.join(" | "))}}</div>`
+          : "";
+        appendGraphRagEntry("assistant", `
+          <h4>Grounded Answer</h4>
+          <p class="chat-answer">${{escapeHtml(payload.answer || "")}}</p>
+          <div class="chat-meta">${{escapeHtml(graphRagTraceLine(payload))}}</div>
+          ${{renderGraphRagCitationGrid(payload.citations || [])}}
+          ${{warningMarkup}}
+        `);
+        graphRagStatus.textContent = "Grounded query completed.";
+
+        const firstFocusId = (payload.citations || []).find((citation) => citation.focus_node_id)?.focus_node_id;
+        if (firstFocusId) {{
+          selectNode(firstFocusId);
+        }}
+      }} catch (error) {{
+        appendGraphRagEntry("assistant", `
+          <h4>Grounded Answer</h4>
+          <p class="chat-answer">${{escapeHtml(String(error?.message || error || "Unknown error"))}}</p>
+        `);
+        graphRagStatus.textContent = "Query failed. Check API settings and try again.";
+      }}
     }});
 
     let pointerState = null;

@@ -117,17 +117,36 @@ def app(environ, start_response):
             body = _read_json_body(environ)
             question = str(body.get("question", "")).strip()
             top_k = body.get("top_k", 5)
+            mode = str(body.get("mode", "extractive")).strip() or "extractive"
+            model = str(body.get("model", "")).strip()
+            max_citations = body.get("max_citations", 8)
         else:
             params = parse_qs(environ.get("QUERY_STRING", ""))
             question = params.get("q", [""])[0].strip()
             top_k = params.get("top_k", ["5"])[0]
+            mode = params.get("mode", ["extractive"])[0].strip() or "extractive"
+            model = params.get("model", [""])[0].strip()
+            max_citations = params.get("max_citations", ["8"])[0]
         try:
             bounded_top_k = max(1, min(int(top_k), 10))
         except (TypeError, ValueError):
             bounded_top_k = 5
+        try:
+            bounded_max_citations = max(2, min(int(max_citations), 20))
+        except (TypeError, ValueError):
+            bounded_max_citations = 8
         if not question:
             return _json_response(start_response, {"error": "Missing question"}, status="400 Bad Request")
-        return _json_response(start_response, store.query(question, top_k=bounded_top_k))
+        return _json_response(
+            start_response,
+            store.query(
+                question,
+                top_k=bounded_top_k,
+                mode=mode,
+                model=model,
+                max_citations=bounded_max_citations,
+            ),
+        )
 
     return _json_response(
         start_response,
